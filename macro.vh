@@ -1,0 +1,20 @@
+`define ADD     5'b00001
+`define ADDCIN  5'b00010
+`define ASUBB   5'b00011
+`define ASUBCIN 5'b00100
+`define BSUBA   5'b00101
+`define BSUBCIN 5'b00110
+`define RETA    5'b00111
+`define RETB    5'b01000
+`define NOTA    5'b01001
+`define NOTB    5'b01010
+`define OR      5'b01011
+`define AND     5'b01100
+`define NXOR    5'b01101
+`define XOR     5'b01110
+`define NAND    5'b01111
+`define RETZERO 5'b00000
+`define SIL     5'b10000
+`define MOVZ    5'b10001
+`define CMP     5'b10010
+
