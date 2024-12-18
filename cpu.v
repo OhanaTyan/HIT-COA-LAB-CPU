@@ -142,7 +142,13 @@ module cpu(
         (op==6'b000010)? (NPC[31:28] + inst[15:0]<<2):
         // bbt
         (op==6'b111111)? (
-            (base_value[bit]==1)? (offset<<2) + NPC: NPC
+            (base_value[bit]==1)? 
+                // (offset<<2) + NPC:
+                (
+                    (offset[15]==1)? NPC + (offset[14:0]<<2) + 32'b11111111_11111110_00000000_00000000:
+                    (offset<<2) + NPC
+                ):
+                NPC
         ):
         NPC
     );
