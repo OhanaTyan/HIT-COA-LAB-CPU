@@ -2,12 +2,12 @@
 
 
 module cpu(
-    input           clk,                // 时钟信号
-    input           resetn,             // 低有效复位信号
+    (*mark_debug="true"*)input           clk,                // 时钟信号
+    (*mark_debug="true"*)input           resetn,             // 低有效复位信号
 
-    output          inst_sram_en,       // 指令存储器读使能
-    output[31:0]    inst_sram_addr,     // 指令存储器读地址
-    input[31:0]     inst_sram_rdata,    // 指令存储器读出的数据
+    (*mark_debug="true"*)output          inst_sram_en,       // 指令存储器读使能
+    (*mark_debug="true"*)output[31:0]    inst_sram_addr,     // 指令存储器读地址
+    (*mark_debug="true"*)input[31:0]     inst_sram_rdata,    // 指令存储器读出的数据
 
     output          data_sram_en,       // 数据存储器端口读/写使能
     output[3:0]     data_sram_wen,      // 数据存储器写使能      
@@ -23,23 +23,66 @@ module cpu(
 );
 
     wire[31:0]  PC;
-    reg         init_PC;
+    (*mark_debug="true"*)reg         init_PC;
  
     // 信号发起
-    reg resetn_have_received, resetn_have_handled;
+    (*mark_debug="true"*)reg resetn_have_received, resetn_have_handled;
+
 
     initial begin
         resetn_have_handled = 0; 
-        resetn_have_handled = 0;
+        resetn_have_received = 0;
         init_PC = 0;
         last_PC = 0;
         last_last_PC = 0;
+        reg_debug_wb_rf_wen = 0;
+        mem_load = 0;
+        reg_debug_wb_rf_wnum = 0;
+        reg_debug_wb_rf_wdata = 0;
+        old_rt = 0;
     end
 
     always @(posedge clk) begin
         if (!resetn) begin
             resetn_have_received = 0;
         end
+
+        if (resetn_have_handled) begin
+            reg_debug_wb_rf_wen = (alu_en_write&&rd!=0); // | mem_load;
+
+            // 将 ALU 的运算结果写回
+            if (alu_en_write) begin
+                if (rd == 0) begin
+
+                end else begin
+                    registers[rd] = alu_reg_write_val;
+                    reg_debug_wb_rf_wnum = rd;
+                    reg_debug_wb_rf_wdata = alu_reg_write_val;
+                end
+            end
+            
+            // 将内存值写回寄存器
+            if (mem_load) begin
+                if (alu_en_write && rd==old_rt) begin 
+                    // 如果读内存写入的寄存器和运算写入的寄存器是同一个
+                    // 则不将读内存的值写入寄存器
+                    // 例如语句如下
+                    // load r3, 4(r0)
+                    // add  r3, r3, r1
+                end else begin 
+                    registers[old_rt] = data_sram_rdata;
+                end
+            end
+            if (op==6'b100011 && rt!=0) begin
+                mem_load = 1;
+                old_rt = rt;
+            end else begin
+                mem_load = 0;
+            end
+            last_last_PC = last_PC;
+            last_PC = PC;
+        end
+
 
         if (resetn && resetn_have_received) begin
             resetn_have_handled = 1;
@@ -60,8 +103,19 @@ module cpu(
             reg_debug_wb_rf_wen = 0;
             reg_debug_wb_rf_wnum = 0;
             reg_debug_wb_rf_wdata = 0;
-        end
+            old_rt = 0;
+            //last_inst_sram_en = 0;
 
+            registers[0]=0; registers[1]=0; registers[2]=0; registers[3]=0;
+            registers[4]=0; registers[5]=0; registers[6]=0; registers[7]=0;
+            registers[8]=0; registers[9]=0; registers[10]=0; registers[11]=0;
+            registers[12]=0; registers[13]=0; registers[14]=0; registers[15]=0;
+            registers[16]=0; registers[17]=0; registers[18]=0; registers[19]=0;
+            registers[20]=0; registers[21]=0; registers[22]=0; registers[23]=0;
+            registers[24]=0; registers[25]=0; registers[26]=0; registers[27]=0;
+            registers[28]=0; registers[29]=0; registers[30]=0; registers[31]=0;
+        end 
+        
     /*
         时序：
         收到 resetn 后，先将 resetn_have_handled 拉低，
@@ -70,13 +124,25 @@ module cpu(
     */
     end
 
+    // reg last_inst_sram_en;
+    /*initial begin
+        last_inst_sram_en = 0;
+    end*/
+
+    /*always @(posedge clk ) begin
+        last_inst_sram_en = inst_sram_en;
+    end*/
+
     // 读取指令
     assign inst_sram_en = resetn_have_received | resetn_have_handled;
-    wire[31:0]  inst = inst_sram_rdata | 0;
+    //wire[31:0]  inst = inst_sram_rdata | 0;
+    wire[31:0] inst = (inst_sram_en)? inst_sram_rdata : 0;
+    
     assign inst_sram_addr = PC;
-    reg[31:0]   last_PC; // 上一条指令的 PC 地址
+    (*mark_debug="true"*)reg[31:0]   last_PC; // 上一条指令的 PC 地址
     reg[31:0]   last_last_PC;
     wire[31:0]  NPC = last_PC + 4;
+    // TODO: 把这里的 assign 改成 reg 变量，并在时钟上升沿更新
     assign PC = 0 | 
         (init_PC==1)? 0:
         (
@@ -105,7 +171,7 @@ module cpu(
 
     // 指令译码
     wire[5:0]   card;
-    wire[5:0]   op;
+    (*mark_debug="true"*)wire[5:0]   op;
     wire[11:0]  op2;
     wire[4:0]   sa;
     wire[4:0]   rs, rt, rd;
@@ -144,14 +210,8 @@ module cpu(
     );
 
     // 写寄存器
-    always @(negedge clk) begin
-        // 存储 debug 信息
-        last_debug_wb_pc = last_last_PC;
-        last_debug_wb_rf_wen = (reg_debug_wb_rf_wen | mem_load);
-        last_debug_wb_rf_wnum = (mem_load)? old_rt: reg_debug_wb_rf_wnum;
-        last_debug_wb_rf_wdata = (mem_load)? data_sram_rdata: reg_debug_wb_rf_wdata;
-
-
+    always @(posedge /*negedge*/ clk) begin
+/*
         reg_debug_wb_rf_wen = (alu_en_write&&rd!=0); // | mem_load;
         // 将 ALU 的运算结果写回
         if (alu_en_write) begin
@@ -176,16 +236,17 @@ module cpu(
                 registers[old_rt] = data_sram_rdata;
             end
         end
-
+*/
     end
 
 
     always @(posedge clk) begin 
         // 存储上一条指令地址
-        if (resetn_have_handled) begin 
+/*        if (resetn_have_handled) begin 
             last_last_PC = last_PC;
             last_PC = PC;
         end
+        */
     end
 
     // 读内存
@@ -199,14 +260,16 @@ module cpu(
     ;
     assign data_sram_wdata = (mem_load&&rt==old_rt)? data_sram_rdata: registers[rt];
 
-    always @(negedge clk) begin
+    always @(posedge/*negedge*/ clk) begin
         // load
+        /*
         if (op==6'b100011 && rt!=0) begin
             mem_load = 1;
             old_rt = rt;
         end else begin
             mem_load = 0;
         end
+        */
     end
 
 
@@ -216,32 +279,12 @@ module cpu(
     reg[31:0]   reg_debug_wb_rf_wdata;
 
     // debug
-    /*
+    
     assign debug_wb_pc = last_last_PC;
-    assign debug_wb_rf_wen = (reg_debug_wb_rf_wen | mem_load) & clk;
-    assign debug_wb_rf_wnum = (mem_load)? old_rt: reg_debug_wb_rf_wnum;
-    assign debug_wb_rf_wdata = (mem_load)? data_sram_rdata: reg_debug_wb_rf_wdata;
-    */
-    reg[31:0]   last_debug_wb_pc;
-    reg         last_debug_wb_rf_wen;
-    reg[4:0]    last_debug_wb_rf_wnum;
-    reg[31:0]   last_debug_wb_rf_wdata;
-
-    initial begin
-        last_debug_wb_pc = 0;
-        last_debug_wb_rf_wen = 0;
-        last_debug_wb_rf_wnum = 0;
-        last_debug_wb_rf_wdata = 0;
-    end
-
-    assign debug_wb_pc = last_debug_wb_pc;
-    assign debug_wb_rf_wen = last_debug_wb_rf_wen;
-    assign debug_wb_rf_wnum = last_debug_wb_rf_wnum;
-    assign debug_wb_rf_wdata = last_debug_wb_rf_wdata;
-
-    always @(negedge clk) begin
-
-    end
+    assign debug_wb_rf_wen = (reg_debug_wb_rf_wen | mem_load)|0;
+    assign debug_wb_rf_wnum = ((mem_load)? old_rt: reg_debug_wb_rf_wnum)|0;
+    assign debug_wb_rf_wdata = ((mem_load)? data_sram_rdata: reg_debug_wb_rf_wdata)|0;
+    
 
 
 endmodule
